@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
 
+
 @register_vision_retriever("jev4")
 class JinaV4Retriever(BaseVisionRetriever):
     def __init__(
@@ -27,6 +28,7 @@ class JinaV4Retriever(BaseVisionRetriever):
         max_length: Optional[int] = None,
         truncate: Optional[int] = None,
         max_pixels: Optional[int] = None,
+        dynamic_resolution: Optional[bool] = True,
         **kwargs,
     ):
         super().__init__(use_visual_embedding=True)
@@ -37,9 +39,10 @@ class JinaV4Retriever(BaseVisionRetriever):
         self.max_length = max_length
         self.truncate = truncate
         self.max_pixels = max_pixels
+        self.dynamic_resolution = dynamic_resolution
         self.model = AutoModel.from_pretrained(pretrained_model_name_or_path, trust_remote_code=True)
         self.model = self.model.eval().to(self.device)
-        self.model.task = 'retrieval'
+        self.model.task = "retrieval"
 
     def forward_queries(self, queries: List[str], batch_size: int, **kwargs) -> List[torch.Tensor]:
         return self.model.encode_text(
@@ -47,19 +50,51 @@ class JinaV4Retriever(BaseVisionRetriever):
             max_length=self.max_length,
             truncate_dim=self.truncate,
             batch_size=batch_size,
-            return_multivector = (self.vector_type.lower() == 'multi_vector'),
+            return_multivector=(self.vector_type.lower() == "multi_vector"),
             **kwargs,
         )
 
     def forward_passages(self, passages: List[Image.Image], batch_size: int, **kwargs) -> List[torch.Tensor]:
-        return self.model.encode_image(
-            images=passages,
-            batch_size=batch_size,
-            truncate_dim=self.truncate,
-            max_pixels=self.max_pixels,
-            return_multivector = (self.vector_type.lower() == 'multi_vector'),
-            **kwargs,
-        )
+        if self.dynamic_resolution:
+            return self._get_dynamic_resolution_embeddings(
+                images=passages,
+                batch_size=batch_size,
+                **kwargs,
+            )
+        else:
+            return self.model.encode_image(
+                images=passages,
+                batch_size=batch_size,
+                truncate_dim=self.truncate,
+                max_pixels=self.max_pixels,
+                return_multivector=(self.vector_type.lower() == "multi_vector"),
+                **kwargs,
+            )
+
+    def _get_dynamic_resolution_embeddings(
+        self, images: List[Image.Image], batch_size: int, **kwargs
+    ) -> List[torch.Tensor]:
+        embeddings = []
+        for img in images:
+            img_embs = []
+            for max_pixels in [150528, 301056, 602112, 1204224]:
+                if img.size[0] * img.size[1] <= max_pixels and max_pixels > 150528:
+                    continue
+                img_embs.append(
+                    self.model.encode_image(
+                        images=[img],
+                        batch_size=batch_size,
+                        truncate_dim=self.truncate,
+                        max_pixels=max_pixels,
+                        return_multivector=(self.vector_type.lower() == "multi_vector"),
+                        **kwargs,
+                    )[0]
+                )
+            # print(len(img_embs), type(img_embs[0]))
+            # import sys
+            # sys.exit()
+            embeddings.append(torch.cat(img_embs, dim=0))
+        return embeddings
 
     def get_scores(
         self,
@@ -72,9 +107,14 @@ class JinaV4Retriever(BaseVisionRetriever):
         if self.vector_type == "single_vector":
             return self.score_single_vector(query_embeddings, passage_embeddings, device=self.device)
         elif self.vector_type == "multi_vector":
-            return self.score_multi_vector(query_embeddings, passage_embeddings, device=self.device, batch_size=batch_size)
+            return self.score_multi_vector(
+                query_embeddings,
+                passage_embeddings,
+                device=self.device,
+                batch_size=batch_size,
+            )
         else:
-            raise ValueError('vector_type must be one of the following: [`single_vector`, `multi_vector`]')
+            raise ValueError("vector_type must be one of the following: [`single_vector`, `multi_vector`]")
 
     @staticmethod
     def score_single_vector(
@@ -122,12 +162,12 @@ class JinaV4Retriever(BaseVisionRetriever):
 
         for i in range(0, len(qs), batch_size):
             scores_batch = []
-            qs_batch = torch.nn.utils.rnn.pad_sequence(qs[i: i + batch_size], batch_first=True, padding_value=0).to(
+            qs_batch = torch.nn.utils.rnn.pad_sequence(qs[i : i + batch_size], batch_first=True, padding_value=0).to(
                 device
             )
             for j in range(0, len(ps), batch_size):
                 ps_batch = torch.nn.utils.rnn.pad_sequence(
-                    ps[j: j + batch_size], batch_first=True, padding_value=0
+                    ps[j : j + batch_size], batch_first=True, padding_value=0
                 ).to(device)
                 scores_batch.append(torch.einsum("bnd,csd->bcns", qs_batch, ps_batch).max(dim=3)[0].sum(dim=2))
             scores_batch = torch.cat(scores_batch, dim=1).cpu()
