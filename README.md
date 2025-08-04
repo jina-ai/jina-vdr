@@ -3,6 +3,8 @@
 [![arXiv](https://img.shields.io/badge/arXiv-2506.18902-b31b1b.svg?style=for-the-badge)](https://arxiv.org/abs/2506.18902)
 [![GitHub](https://img.shields.io/badge/Jina%20VDR-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jina-ai/jina-vdr)
 [![Hugging Face](https://img.shields.io/badge/Jina%20VDR%20Collecttion-FFD21E?style=for-the-badge&logo=huggingface&logoColor=000)](https://huggingface.co/collections/jinaai/jinavdr-visual-document-retrieval-684831c022c53b21c313b449)
+
+📚 Blogs: [**Jina VDR**](https://jina.ai/news/jinavdr-new-visual-document-retrieval-benchmark-with-95-tasks-in-20-languages/) | [**Resolution Experiments**](https://jina.ai/news/how-image-resolution-impacts-visual-document-retrieval)
 ---
 
 ## Scope of this Benchmark
