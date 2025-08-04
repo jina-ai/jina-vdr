@@ -15,7 +15,7 @@ more query types, a much more diverse array of materials (e.g. maps, markdown do
 
 The code is based on the [vidore-benchmark](https://github.com/illuin-tech/vidore-benchmark) code.
 
-## How to run the Vidore Evaluation
+## How to run the Evaluation
 
 To evaluate models on the Jina VDR benchmark, install the requirements corresponding to your selected model:
 
